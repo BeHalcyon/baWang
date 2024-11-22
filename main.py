@@ -82,8 +82,20 @@ def aes_decrypt(content, key='', iv=''):
     res = unpad(res, AES.block_size)
     return res.decode('utf-8')
 
+def get_proxies(proxy_num=10):
+    url = f"http://api.tianqiip.com/getip?secret=iq5r3saimsgwtyrq&num={proxy_num}&type=json&port=2&time=3&mr=1&sign=95310fdd20686f4e576870fdfe6b204f"
+    res = []
+    try:
+        proxies = requests.get(url, timeout=10).json()
+        for proxy in proxies["data"]:
+            res.append({"https": "http://" + str(proxy["ip"]) + ":" + str(proxy["port"])})
+        return res
+    except Exception as e:
+        printf(e)
+    return [None] * proxy_num
 
-def run(userId, userToken, userKey, userIv, userVersion, storeId, activityId, keyWords):
+
+def run(userId, userToken, userKey, userIv, userVersion, storeId, activityId, keyWords, proxy):
     ip_address = '123.123.' + str(random.randint(1, 254))+'.' + str(random.randint(1, 254))
     head = {
         "qm-user-token": userToken,
@@ -119,34 +131,43 @@ def run(userId, userToken, userKey, userIv, userVersion, storeId, activityId, ke
     callJs = execjs.compile(getFileContent('./type.js'))
     type1475 = callJs.call('postRequest', requestData)
     res = requests.post("https://miniapp.qmai.cn/web/cmk-center/receive/takePartInReceive?type__1475="+type1475,
-                  headers=head, data=requestData)
+                  headers=head, data=requestData, proxies=proxy)
     printf(res.text)
 
 def main(storeId, activityId, keywords):
-    for userInfo in users:
-        if userInfo == '':
-            printf(f'用户信息为空 跳过...')
-            continue
-        try:
-            userArry = userInfo.split('----')
-            if len(userArry) != 5:
-                printf(f'用户信息填写错误 跳过...')
+    proxies = None
+    proxies = get_proxies(proxy_num=(maxCount*len(users))//5)
+    printf(proxies)
+
+    for i in range(maxCount):
+        for userInfo in users:
+            if userInfo == '':
+                printf(f'用户信息为空 跳过...')
                 continue
-            userId = userArry[0]
-            userToken = userArry[1]
-            userKey = userArry[2]
-            userIv = userArry[3]
-            userVersion = userArry[4]
-            printf(f'开始用户：'+userId)
-            for i in range(maxCount):
+            try:
+                userArry = userInfo.split('----')
+                if len(userArry) != 5:
+                    printf(f'用户信息填写错误 跳过...')
+                    continue
+                userId = userArry[0]
+                userToken = userArry[1]
+                userKey = userArry[2]
+                userIv = userArry[3]
+                userVersion = userArry[4]
+                printf(f'开始用户：' + userId)
                 for keyword in keywords:
-                    pool.submit(run, userId, userToken, userKey, userIv, userVersion, storeId, activityId, keyword)
+                    pool.submit(run, userId, userToken, userKey, userIv, userVersion, storeId, activityId, keyword,
+                                proxies[i % len(proxies)])
                     time.sleep(intervalTime)
-        except Exception as e:
-            printf(f'运行异常：{e}')
+            except Exception as e:
+                printf(f'运行异常：{e}')
 
 
 if __name__ == '__main__':
+    # res = get_proxies(proxy_num=1)
+    # print(res)
+    # exit()
+
     config = {}
     try:
         config = json.loads(getFileContent('./config.json'))
